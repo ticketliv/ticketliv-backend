@@ -1,0 +1,319 @@
+const bcrypt = require('bcryptjs');
+const { query } = require('../../config/database');
+const { asyncHandler, AppError } = require('../../middleware/errorHandler');
+
+// Utility to log actions
+const logAudit = async (userId, action, entityType, entityId, oldData, newData, ipAddress) => {
+  try {
+    await query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_data, new_data, ip_address) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, action, entityType, entityId, oldData || null, newData || null, ipAddress || '127.0.0.1']
+    );
+  } catch (err) {
+    console.error('Audit log failed:', err.message);
+  }
+};
+
+// ==========================================
+// Event Publishing
+// ==========================================
+
+exports.getPendingEvents = asyncHandler(async (req, res) => {
+  // We look for events that have publishing_status = 'Pending Approval'
+  // and join some basic info
+  const result = await query(`
+    SELECT e.id, e.title, e.start_date, e.status, e.publishing_status, e.created_at, u.name as organizer_name 
+    FROM events e 
+    LEFT JOIN admin_users u ON e.organizer_id = u.id 
+    WHERE e.publishing_status = 'Pending Approval' 
+    ORDER BY e.created_at DESC
+  `);
+  res.json({ success: true, data: result.rows });
+});
+
+exports.approveEvent = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const event = await query('SELECT id, publishing_status, status FROM events WHERE id = $1', [id]);
+  if (event.rows.length === 0) throw new AppError('Event not found', 404);
+
+  const result = await query(
+    `UPDATE events SET publishing_status = 'Published', status = 'Live', updated_at = NOW() 
+     WHERE id = $1 RETURNING id, title, publishing_status`,
+    [id]
+  );
+  
+  await logAudit(req.user.id, 'APPROVE_EVENT', 'Event', id, event.rows[0], result.rows[0], req.ip);
+  res.json({ success: true, message: 'Event approved and published', data: result.rows[0] });
+});
+
+exports.rejectEvent = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  
+  const event = await query('SELECT id, publishing_status FROM events WHERE id = $1', [id]);
+  if (event.rows.length === 0) throw new AppError('Event not found', 404);
+
+  const result = await query(
+    `UPDATE events SET publishing_status = 'Rejected', updated_at = NOW() 
+     WHERE id = $1 RETURNING id, title, publishing_status`,
+    [id]
+  );
+  
+  // You might want to store 'reason' in an event_comments table or pass it to notifications
+  await logAudit(req.user.id, 'REJECT_EVENT', 'Event', id, event.rows[0], { ...result.rows[0], reason }, req.ip);
+  res.json({ success: true, message: 'Event rejected', data: result.rows[0] });
+});
+
+// ==========================================
+// User Management
+// ==========================================
+
+exports.getAllUsers = asyncHandler(async (req, res) => {
+  const result = await query(
+    `SELECT id, name, email, role, permissions, is_active, created_at 
+     FROM admin_users ORDER BY created_at DESC`
+  );
+  const users = result.rows.map(u => ({
+    ...u,
+    permissions: typeof u.permissions === 'string' ? JSON.parse(u.permissions) : (u.permissions || [])
+  }));
+  res.json({ success: true, data: users });
+});
+
+exports.createUser = asyncHandler(async (req, res) => {
+  const { name, email, password, role, permissions, is_active } = req.body;
+  
+  const existing = await query('SELECT id FROM admin_users WHERE email = $1', [email]);
+  if (existing.rows.length > 0) throw new AppError('Email already exists', 409);
+
+  const passwordHash = await bcrypt.hash(password || 'ticketliv2026', 12);
+  const permsString = JSON.stringify(permissions || []);
+  const activeStatus = is_active !== undefined ? is_active : true;
+
+  const result = await query(
+    `INSERT INTO admin_users (name, email, password_hash, role, permissions, is_active) 
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, permissions, is_active`,
+    [name, email, passwordHash, role, permsString, activeStatus]
+  );
+
+  await logAudit(req.user.id, 'CREATE_USER', 'User', result.rows[0].id, null, result.rows[0], req.ip);
+  res.status(201).json({ success: true, data: result.rows[0] });
+});
+
+exports.updateUser = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { name, role, permissions, is_active } = req.body;
+
+  const user = await query('SELECT * FROM admin_users WHERE id = $1', [id]);
+  if (user.rows.length === 0) throw new AppError('User not found', 404);
+
+  const permsString = permissions ? JSON.stringify(permissions) : user.rows[0].permissions;
+
+  const result = await query(
+    `UPDATE admin_users 
+     SET name = COALESCE($1, name), role = COALESCE($2, role), permissions = $3, 
+         is_active = COALESCE($4, is_active), updated_at = NOW()
+     WHERE id = $5 RETURNING id, name, email, role, permissions, is_active`,
+    [name, role, permsString, is_active, id]
+  );
+
+  await logAudit(req.user.id, 'UPDATE_USER', 'User', id, user.rows[0], result.rows[0], req.ip);
+  res.json({ success: true, data: result.rows[0] });
+});
+
+exports.deleteUser = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  // Soft delete for audit tracking
+  const result = await query(`UPDATE admin_users SET is_active = false WHERE id = $1 RETURNING id, email`, [id]);
+  if(result.rows.length === 0) throw new AppError('User not found', 404);
+
+  await logAudit(req.user.id, 'DELETE_USER', 'User', id, { is_active: true }, { is_active: false }, req.ip);
+  res.json({ success: true, message: 'User deactivated successfully' });
+});
+
+// ==========================================
+// Scanner Management
+// ==========================================
+
+exports.getScanners = asyncHandler(async (req, res) => {
+  // Scanners are users with role 'Scanner User'
+  const result = await query(`
+    SELECT id, name, email, is_active 
+    FROM admin_users 
+    WHERE role IN ('Scanner User', 'Scanner')
+  `);
+  
+  // For each scanner, get their assigned events
+  for (let scanner of result.rows) {
+    const assignments = await query(`
+      SELECT sa.id as assignment_id, e.id as event_id, e.title 
+      FROM scanner_assignments sa 
+      JOIN events e ON sa.event_id = e.id 
+      WHERE sa.user_id = $1 AND sa.status = 'Active'
+    `, [scanner.id]);
+    scanner.assignments = assignments.rows;
+  }
+
+  res.json({ success: true, data: result.rows });
+});
+
+exports.assignScannerToEvent = asyncHandler(async (req, res) => {
+  const { user_id, event_id } = req.body;
+
+  const existing = await query(`SELECT id FROM scanner_assignments WHERE user_id = $1 AND event_id = $2`, [user_id, event_id]);
+  if (existing.rows.length > 0) {
+    throw new AppError('Scanner is already assigned to this event', 400);
+  }
+
+  const result = await query(
+    `INSERT INTO scanner_assignments (user_id, event_id, assigned_by) 
+     VALUES ($1, $2, $3) RETURNING *`,
+    [user_id, event_id, req.user.id]
+  );
+  
+  await logAudit(req.user.id, 'ASSIGN_SCANNER', 'Scanner_Assignment', result.rows[0].id, null, result.rows[0], req.ip);
+  res.status(201).json({ success: true, data: result.rows[0] });
+});
+
+exports.removeScannerAssignment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await query(`DELETE FROM scanner_assignments WHERE id = $1 RETURNING *`, [id]);
+  if (result.rows.length === 0) throw new AppError('Assignment not found', 404);
+
+  await logAudit(req.user.id, 'REMOVE_SCANNER', 'Scanner_Assignment', id, result.rows[0], null, req.ip);
+  res.json({ success: true, message: 'Assignment removed' });
+});
+
+// ==========================================
+// Audit Logs
+// ==========================================
+
+// ==========================================
+// Dashboard & Analytics
+// ==========================================
+
+exports.getDashboardStats = asyncHandler(async (req, res) => {
+  // 1. Core Metrics
+  const metrics = await query(`
+    SELECT 
+      (SELECT COUNT(*)::INTEGER FROM bookings WHERE status IN ('Confirmed', 'pending')) as total_bookings,
+      (SELECT COUNT(*)::INTEGER FROM users) as total_users,
+      (SELECT COALESCE(SUM(total_amount), 0)::FLOAT FROM bookings WHERE status = 'Confirmed') as total_revenue,
+      (SELECT COUNT(*)::INTEGER FROM tickets WHERE scan_status = 'scanned') as total_scanned,
+      (SELECT COUNT(*)::INTEGER FROM tickets) as total_tickets
+  `);
+
+  // 2. Revenue Trend (Last 7 Days)
+  const revenueTrend = await query(`
+    SELECT 
+      TO_CHAR(d, 'Mon DD') as name,
+      COALESCE(SUM(b.total_amount), 0)::FLOAT as revenue
+    FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day') d
+    LEFT JOIN bookings b ON DATE(b.created_at) = d AND b.status = 'Confirmed'
+    GROUP BY d
+    ORDER BY d ASC
+  `);
+
+  // 3. Recent Activities
+  const recentActivities = await query(`
+    SELECT 
+      b.id, 'booking' as type, 
+      'New booking for "' || e.title || '"' as text,
+      u.full_name as user_name,
+      b.created_at as time
+    FROM bookings b
+    JOIN events e ON b.event_id = e.id
+    JOIN users u ON b.user_id = u.id
+    ORDER BY b.created_at DESC
+    LIMIT 5
+  `);
+
+  // 4. Scan Trend (Last 10 Hours)
+  const scanTrend = await query(`
+    SELECT 
+      TO_CHAR(h, 'HH24:MI') as time,
+      COALESCE(COUNT(sl.id), 0)::INTEGER as count
+    FROM generate_series(
+      CURRENT_TIMESTAMP - INTERVAL '9 hours', 
+      CURRENT_TIMESTAMP, 
+      '1 hour'
+    ) h
+    LEFT JOIN scan_logs sl ON DATE_TRUNC('hour', sl.created_at) = DATE_TRUNC('hour', h)
+    GROUP BY h
+    ORDER BY h ASC
+  `);
+
+  // 5. Venue Revenue (Top 5)
+  const venueRevenue = await query(`
+    SELECT 
+      COALESCE(e.venue_name, 'Unknown Venue') as name, 
+      SUM(b.total_amount)::FLOAT as revenue
+    FROM bookings b
+    JOIN events e ON b.event_id = e.id
+    WHERE b.status = 'Confirmed'
+    GROUP BY e.venue_name
+    ORDER BY revenue DESC
+    LIMIT 5
+  `);
+
+  // 6. Scan Audit (Recent Scans)
+  const recentScans = await query(`
+    SELECT 
+      sl.id, sl.result as type,
+      'Scan at Gate ' || sl.gate as text,
+      t.attendee_name as user_name,
+      sl.created_at as time
+    FROM scan_logs sl
+    JOIN tickets t ON sl.ticket_id = t.id
+    ORDER BY sl.created_at DESC
+    LIMIT 5
+  `);
+
+  res.json({
+    success: true,
+    data: {
+      metrics: metrics.rows[0],
+      revenueTrend: revenueTrend.rows,
+      scanTrend: scanTrend.rows,
+      venueRevenue: venueRevenue.rows,
+      activities: recentActivities.rows,
+      scans: recentScans.rows
+    }
+  });
+});
+
+exports.getTransactions = asyncHandler(async (req, res) => {
+  const result = await query(`
+    SELECT p.id, p.transaction_id, p.amount, p.currency, p.status, p.payment_method, p.created_at,
+      b.booking_ref, e.title as event_title
+    FROM payments p
+    LEFT JOIN bookings b ON p.booking_id = b.id
+    LEFT JOIN events e ON b.event_id = e.id
+    ORDER BY p.created_at DESC LIMIT 100
+  `);
+
+  const mapped = result.rows.map(r => ({
+    id: r.id,
+    to: r.event_title || 'General Booking',
+    amount: `₹${parseFloat(r.amount).toLocaleString()}`,
+    date: r.created_at,
+    type: r.payment_method || 'UPI',
+    status: r.status === 'success' ? 'Completed' : r.status,
+  }));
+
+  res.json({ success: true, data: mapped });
+});
+
+exports.getAuditLogs = asyncHandler(async (req, res) => {
+  const result = await query(`
+    SELECT a.*, u.name as user_name 
+    FROM audit_logs a
+    LEFT JOIN admin_users u ON a.user_id = u.id
+    ORDER BY a.created_at DESC 
+    LIMIT 100
+  `);
+  res.json({ success: true, data: result.rows });
+});
