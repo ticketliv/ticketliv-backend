@@ -199,9 +199,9 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
   // 1. Core Metrics
   const metrics = await query(`
     SELECT 
-      (SELECT COUNT(*)::INTEGER FROM bookings WHERE status IN ('Confirmed', 'pending')) as total_bookings,
+      (SELECT COUNT(*)::INTEGER FROM bookings WHERE status IN ('confirmed', 'pending')) as total_bookings,
       (SELECT COUNT(*)::INTEGER FROM users) as total_users,
-      (SELECT COALESCE(SUM(total_amount), 0)::FLOAT FROM bookings WHERE status = 'Confirmed') as total_revenue,
+      (SELECT COALESCE(SUM(total_amount), 0)::FLOAT FROM bookings WHERE status = 'confirmed') as total_revenue,
       (SELECT COUNT(*)::INTEGER FROM tickets WHERE scan_status = 'scanned') as total_scanned,
       (SELECT COUNT(*)::INTEGER FROM tickets) as total_tickets
   `);
@@ -212,7 +212,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       TO_CHAR(d, 'Mon DD') as name,
       COALESCE(SUM(b.total_amount), 0)::FLOAT as revenue
     FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day') d
-    LEFT JOIN bookings b ON DATE(b.created_at) = d AND b.status = 'Confirmed'
+    LEFT JOIN bookings b ON DATE(b.created_at) = d AND b.status = 'confirmed'
     GROUP BY d
     ORDER BY d ASC
   `);
@@ -241,7 +241,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       CURRENT_TIMESTAMP, 
       '1 hour'
     ) h
-    LEFT JOIN scan_logs sl ON DATE_TRUNC('hour', sl.created_at) = DATE_TRUNC('hour', h)
+    LEFT JOIN scan_logs sl ON DATE_TRUNC('hour', sl.scanned_at) = DATE_TRUNC('hour', h)
     GROUP BY h
     ORDER BY h ASC
   `);
@@ -253,7 +253,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       SUM(b.total_amount)::FLOAT as revenue
     FROM bookings b
     JOIN events e ON b.event_id = e.id
-    WHERE b.status = 'Confirmed'
+    WHERE b.status = 'confirmed'
     GROUP BY e.venue_name
     ORDER BY revenue DESC
     LIMIT 5
@@ -265,10 +265,10 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       sl.id, sl.result as type,
       'Scan at Gate ' || sl.gate as text,
       t.attendee_name as user_name,
-      sl.created_at as time
+      sl.scanned_at as time
     FROM scan_logs sl
     JOIN tickets t ON sl.ticket_id = t.id
-    ORDER BY sl.created_at DESC
+    ORDER BY sl.scanned_at DESC
     LIMIT 5
   `);
 
@@ -315,5 +315,32 @@ exports.getAuditLogs = asyncHandler(async (req, res) => {
     ORDER BY a.created_at DESC 
     LIMIT 100
   `);
+  res.json({ success: true, data: result.rows });
+});
+
+exports.getAttendees = asyncHandler(async (req, res) => {
+  const result = await query(`
+    SELECT 
+      t.id,
+      t.attendee_name as "fullName",
+      u.mobile_number as "mobileNumber",
+      u.email,
+      COALESCE(cat.name, 'Uncategorized') as "category",
+      e.id as "eventId",
+      tt.name as "ticketType",
+      1 as "ticketCount",
+      b.created_at as "bookingDate",
+      b.status
+    FROM tickets t
+    JOIN bookings b ON t.booking_id = b.id
+    JOIN users u ON b.user_id = u.id
+    JOIN events e ON b.event_id = e.id
+    JOIN ticket_types tt ON t.ticket_type_id = tt.id
+    LEFT JOIN event_categories ec ON e.id = ec.event_id
+    LEFT JOIN categories cat ON ec.category_id = cat.id
+    ORDER BY b.created_at DESC
+    LIMIT 500
+  `);
+
   res.json({ success: true, data: result.rows });
 });

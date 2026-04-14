@@ -66,7 +66,7 @@ exports.getAll = asyncHandler(async (req, res) => {
     GROUP BY e.id
     ORDER BY e.${sortCol} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-  `, [...params, parseInt(limit), offset]);
+  `, params);
 
   const events = result.rows.map(mapEvent);
 

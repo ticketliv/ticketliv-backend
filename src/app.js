@@ -38,22 +38,30 @@ initSocket(server);
 
 // --- CORS Configuration ---
 const allowedOrigins = [
-  process.env.ADMIN_URL || 'http://localhost:5173',
-  process.env.ORGANIZER_URL || 'http://localhost:5174',
-  process.env.MOBILE_URL || 'http://localhost:19006',
+  'https://admin.ticketliv.com',
+  'https://www.ticketliv.com',
+  'https://ticketliv.com',
+  process.env.ADMIN_URL,
+  process.env.ORGANIZER_URL,
+  process.env.MOBILE_URL,
+  'http://localhost:5173',
+  'http://localhost:5174',
   'http://localhost:3000',
-];
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
     const isProduction = process.env.NODE_ENV === 'production';
-    // Allow requests with no origin (mobile apps, Postman)
     if (!origin) return callback(null, true);
+
+    // Allow any ticketliv.com subdomain in production
+    if (isProduction && origin.endsWith('ticketliv.com')) {
+      return callback(null, true);
+    }
 
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      // In production, strictly enforce allowed origins. In dev, be more lenient if needed.
       callback(isProduction ? new Error('Not allowed by CORS') : null, !isProduction);
     }
   },
@@ -76,6 +84,17 @@ app.use('/api/', rateLimiter.general);
 app.use('/api/auth/', rateLimiter.auth);
 
 // --- Health Check ---
+// Professional Welcome Route
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Welcome to the TicketLiv Production API',
+    version: '2.5.0',
+    status: 'Operational',
+    documentation: '/api/docs'
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'ticketliv-backend', timestamp: new Date().toISOString() });
 });

@@ -40,7 +40,11 @@ const seed = async () => {
     
     await query(
       `INSERT INTO admin_users (name, email, password_hash, role, permissions) 
-       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO NOTHING`,
+       VALUES ($1, $2, $3, $4, $5) 
+       ON CONFLICT (email) DO UPDATE SET 
+       password_hash = EXCLUDED.password_hash,
+       permissions = EXCLUDED.permissions,
+       updated_at = NOW()`,
       ['Super Admin', 'admin@ticketliv.com', passwordHash, 'Super Admin', permissions]
     );
     console.log('✅ Admin user seeded (admin@ticketliv.com)');
@@ -51,10 +55,29 @@ const seed = async () => {
     
     await query(
       `INSERT INTO admin_users (name, email, password_hash, role, permissions) 
-       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO NOTHING`,
+       VALUES ($1, $2, $3, $4, $5) 
+       ON CONFLICT (email) DO UPDATE SET 
+       password_hash = EXCLUDED.password_hash,
+       permissions = EXCLUDED.permissions,
+       updated_at = NOW()`,
       ['Event Scanner', 'scanner@ticketliv.com', scannerPasswordHash, 'Scanner User', scannerPermissions]
     );
     console.log('✅ Scanner user seeded (scanner@ticketliv.com)');
+
+    // Seed New Admin User
+    const sysAdminPasswordHash = await bcrypt.hash('password123', 12);
+    const sysAdminPermissions = JSON.stringify(['/dashboard', '/events', '/marketing', '/attendees', '/create-event', '/categories', '/ads', '/analytics', '/finance', '/reports', '/settings', '/team', '/tickets']);
+    
+    await query(
+      `INSERT INTO admin_users (name, email, password_hash, role, permissions) 
+       VALUES ($1, $2, $3, $4, $5) 
+       ON CONFLICT (email) DO UPDATE SET 
+       password_hash = EXCLUDED.password_hash,
+       permissions = EXCLUDED.permissions,
+       updated_at = NOW()`,
+      ['System Admin', 'sysadmin@ticketliv.com', sysAdminPasswordHash, 'Super Admin', sysAdminPermissions]
+    );
+    console.log('✅ New Admin user seeded (sysadmin@ticketliv.com)');
 
     // Seed Ads
     const ads = [

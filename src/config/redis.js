@@ -5,20 +5,34 @@ let redis = null;
 const getRedis = () => {
   if (!redis) {
     try {
-      redis = new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD || undefined,
-        maxRetriesPerRequest: 3,
-        retryStrategy(times) {
-          if (times > 3) {
-            console.warn('⚠️ Redis: Max retries reached, operating without cache');
-            return null;
-          }
-          return Math.min(times * 200, 2000);
-        },
-        lazyConnect: true,
-      });
+      if (process.env.REDIS_URL) {
+        redis = new Redis(process.env.REDIS_URL, {
+          maxRetriesPerRequest: 3,
+          retryStrategy(times) {
+            if (times > 3) {
+              console.warn('⚠️ Redis: Max retries reached, operating without cache');
+              return null;
+            }
+            return Math.min(times * 200, 2000);
+          },
+          lazyConnect: true,
+        });
+      } else {
+        redis = new Redis({
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+          password: process.env.REDIS_PASSWORD || undefined,
+          maxRetriesPerRequest: 3,
+          retryStrategy(times) {
+            if (times > 3) {
+              console.warn('⚠️ Redis: Max retries reached, operating without cache');
+              return null;
+            }
+            return Math.min(times * 200, 2000);
+          },
+          lazyConnect: true,
+        });
+      }
 
       redis.on('connect', () => console.log('🔴 Redis connected'));
       redis.on('error', (err) => console.warn('⚠️ Redis error:', err.message));

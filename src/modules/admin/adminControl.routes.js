@@ -31,5 +31,6 @@ router.get('/transactions', adminControl.getTransactions);
 
 // --- Audit & Logs ---
 router.get('/audit', adminControl.getAuditLogs);
+router.get('/attendees', adminControl.getAttendees);
 
 module.exports = router;

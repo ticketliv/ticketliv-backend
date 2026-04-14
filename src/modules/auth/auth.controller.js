@@ -73,7 +73,7 @@ exports.login = asyncHandler(async (req, res) => {
 
 
   const result = await query(
-    'SELECT id, name, email, password_hash, role, permissions FROM admin_users WHERE email = $1 AND is_active = true',
+    'SELECT id, name, email, password_hash, role, permissions FROM admin_users WHERE LOWER(email) = LOWER($1) AND is_active = true',
     [email]
   );
 
@@ -165,6 +165,46 @@ exports.createUser = asyncHandler(async (req, res) => {
   const user = result.rows[0];
   user.permissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : (user.permissions || []);
   res.status(201).json({ success: true, data: user });
+});
+
+// PUT /auth/users/:id
+exports.updateUser = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { name, email, password, role } = req.body;
+
+  const updates = [];
+  const params = [];
+  let paramIdx = 1;
+
+  if (name) {
+    updates.push(`name = $${paramIdx++}`);
+    params.push(name);
+  }
+  if (email) {
+    updates.push(`email = $${paramIdx++}`);
+    params.push(email);
+  }
+  if (role) {
+    updates.push(`role = $${paramIdx++}`);
+    params.push(role);
+  }
+  if (password) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    updates.push(`password_hash = $${paramIdx++}`);
+    params.push(passwordHash);
+  }
+
+  if (updates.length === 0) throw new AppError('No update data provided', 400);
+
+  params.push(id);
+  const queryText = `UPDATE admin_users SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${paramIdx} RETURNING id, name, email, role, permissions, is_active`;
+  
+  const result = await query(queryText, params);
+  if (result.rows.length === 0) throw new AppError('User not found', 404);
+
+  const user = result.rows[0];
+  user.permissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : (user.permissions || []);
+  res.json({ success: true, data: user });
 });
 
 // PUT /auth/users/:id/permissions

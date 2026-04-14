@@ -25,6 +25,7 @@ router.post('/refresh', authController.refreshToken);
 router.get('/me', authenticate, authController.getMe);
 router.get('/users', authenticate, authController.getAllUsers);
 router.post('/users', authenticate, validate(registerSchema), authController.createUser);
+router.put('/users/:id', authenticate, authController.updateUser);
 router.put('/users/:id/permissions', authenticate, authController.updatePermissions);
 router.delete('/users/:id', authenticate, authController.deleteUser);
 router.post('/logout', authenticate, authController.logout);
