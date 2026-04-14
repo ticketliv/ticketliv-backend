@@ -31,6 +31,7 @@ const adminControlRoutes = require('./modules/admin/adminControl.routes');
 const securityController = require('./modules/tickets/security.controller');
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // Initialize WebSocket
