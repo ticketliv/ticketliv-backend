@@ -2,6 +2,7 @@ const { query, getClient } = require('../../config/database');
 const { asyncHandler, AppError } = require('../../middleware/errorHandler');
 const { cache } = require('../../config/redis');
 const { v4: uuidv4 } = require('uuid');
+const { formatDateOnly } = require('../../utils/dateUtils');
 
 const generateBookingRef = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -167,7 +168,12 @@ exports.getAll = asyncHandler(async (req, res) => {
     LIMIT $${idx++} OFFSET $${idx}
   `, params);
 
-  res.json({ success: true, data: result.rows });
+  const mapped = result.rows.map(r => ({
+    ...r,
+    created_at: formatDateOnly(r.created_at)
+  }));
+
+  res.json({ success: true, data: mapped });
 });
 
 // GET /bookings/:id
@@ -184,7 +190,11 @@ exports.getById = asyncHandler(async (req, res) => {
   `, [req.params.id]);
 
   if (result.rows.length === 0) throw new AppError('Booking not found', 404);
-  res.json({ success: true, data: result.rows[0] });
+  const mapped = {
+    ...result.rows[0],
+    created_at: formatDateOnly(result.rows[0].created_at)
+  };
+  res.json({ success: true, data: mapped });
 });
 
 // GET /bookings/user/:userId
@@ -214,7 +224,13 @@ exports.getByUser = asyncHandler(async (req, res) => {
     ORDER BY b.created_at DESC
   `, [req.params.userId]);
 
-  res.json({ success: true, data: result.rows });
+  const mapped = result.rows.map(r => ({
+    ...r,
+    created_at: formatDateOnly(r.created_at),
+    start_date: formatDateOnly(r.start_date)
+  }));
+
+  res.json({ success: true, data: mapped });
 });
 
 // PUT /bookings/:id/cancel

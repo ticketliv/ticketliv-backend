@@ -113,6 +113,8 @@ const migrate = async () => {
         sponsors JSONB DEFAULT '[]',
         field_config JSONB DEFAULT '{}',
         gates JSONB DEFAULT '[]',
+        main_media JSONB DEFAULT '[]',
+        layout_media JSONB DEFAULT '[]',
         is_featured BOOLEAN DEFAULT false,
         is_popular BOOLEAN DEFAULT false,
         presenter_name VARCHAR(255),

@@ -3,6 +3,7 @@ const { asyncHandler } = require('../../middleware/errorHandler');
 const qrService = require('../tickets/qr.service');
 const { emitScanEvent } = require('../../config/socket');
 const { v4: uuidv4 } = require('uuid');
+const { formatDateOnly } = require('../../utils/dateUtils');
 
 // POST /scanner/validate — Validate a single ticket QR
 exports.validateTicket = asyncHandler(async (req, res) => {
@@ -218,6 +219,11 @@ exports.getStats = asyncHandler(async (req, res) => {
   `, [eventId || null]);
 
   const s = stats.rows[0];
+  const mappedRecentScans = recentScans.rows.map(r => ({
+    ...r,
+    scanned_at: formatDateOnly(r.scanned_at)
+  }));
+
   res.json({
     success: true,
     data: {
@@ -226,7 +232,7 @@ exports.getStats = asyncHandler(async (req, res) => {
       totalUnscanned: s.total_unscanned,
       attendanceRate: s.total_tickets > 0 ? Math.round((s.total_scanned / s.total_tickets) * 100) : 0,
       gateStats: gateStats.rows,
-      recentScans: recentScans.rows,
+      recentScans: mappedRecentScans,
       duplicateAttempts: duplicateAttempts.rows[0]?.count || 0,
     },
   });
@@ -291,7 +297,11 @@ exports.getScanLogs = asyncHandler(async (req, res) => {
     WHERE sl.event_id = $1
     ORDER BY sl.scanned_at DESC LIMIT 100
   `, [eventId]);
-  res.json({ success: true, data: result.rows });
+  const mapped = result.rows.map(r => ({
+    ...r,
+    scanned_at: formatDateOnly(r.scanned_at)
+  }));
+  res.json({ success: true, data: mapped });
 });
 
 // Helper: Log scan attempt

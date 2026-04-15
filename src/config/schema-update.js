@@ -28,6 +28,10 @@ const run = async () => {
     // 4. Add gates to events
     await pool.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS gates JSONB DEFAULT '[]'");
 
+    // 5. Add modern media arrays
+    await pool.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS main_media JSONB DEFAULT '[]'");
+    await pool.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS layout_media JSONB DEFAULT '[]'");
+
     console.log('✅ Schema updated successfully!');
   } catch (err) {
     console.error('❌ Error updating schema:', err);

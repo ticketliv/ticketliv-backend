@@ -2,6 +2,7 @@ const { query, getClient } = require('../../config/database');
 const { asyncHandler, AppError } = require('../../middleware/errorHandler');
 const { cache } = require('../../config/redis');
 const { v4: uuidv4 } = require('uuid');
+const { formatDateOnly, formatTimeOnly } = require('../../utils/dateUtils');
 
 /**
  * Shared helper to map database event records to the format expected by clients (Mobile & Admin).
@@ -9,6 +10,7 @@ const { v4: uuidv4 } = require('uuid');
  */
 const mapEvent = (e) => {
   if (!e) return null;
+  
   return {
     ...e,
     ticketCategories: e.ticket_categories || [],
@@ -16,19 +18,22 @@ const mapEvent = (e) => {
     sales: e.total_sales || 0,
     revenue: parseFloat(e.total_revenue || 0),
     revenueCurrency: e.revenue_currency || 'INR',
-    date: e.start_date, // Mobile app expects 'date'
-    start_date: e.start_date, // Keeping for backward compatibility
-    time: e.start_date ? new Date(e.start_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '',
+    date: formatDateOnly(e.start_date), // Format to YYYY-MM-DD
+    start_date: formatDateOnly(e.start_date), 
+    end_date: formatDateOnly(e.end_date),
+    time: formatTimeOnly(e.start_date),
     location: e.venue_name || '',
     publishingStatus: e.publishing_status,
     timezone: e.timezone || 'Asia/Kolkata',
     latitude: parseFloat(e.latitude) || null,
     longitude: parseFloat(e.longitude) || null,
     organizerId: e.organizer_id,
-    more_info: e.more_info || [], // Highlights
-    sponsors: e.sponsors || [], // Partners
-    financials: e.financials || {}, // Tax/Fees
-    gates: e.gates || []
+    more_info: e.more_info || [],
+    sponsors: e.sponsors || [],
+    financials: e.financials || {},
+    gates: e.gates || [],
+    mainMedia: e.main_media || [],
+    layoutMedia: e.layout_media || []
   };
 };
 
@@ -206,8 +211,8 @@ exports.create = asyncHandler(async (req, res) => {
       INSERT INTO events (id, title, description, start_date, end_date, venue_name, venue_address, map_url,
         status, image_url, video_url, layout_image, gallery, tags, terms, more_info, extra_info,
         financials, prohibited_items, refund_policy, entry_policy, support_email, support_phone,
-        sponsors, field_config, gates, is_featured, is_popular, presenter_name, organizer_name, revenue_currency)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+        sponsors, field_config, gates, main_media, layout_media, is_featured, is_popular, presenter_name, organizer_name, revenue_currency)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
     `, [
       eventId, eventData.title, eventData.description, eventData.date || eventData.start_date, eventData.end_date,
       eventData.location || eventData.venue_name, eventData.venue_address, eventData.map_url,
@@ -218,6 +223,7 @@ exports.create = asyncHandler(async (req, res) => {
       JSON.stringify(eventData.prohibited_items || []), eventData.refund_policy, eventData.entry_policy,
       eventData.support_email, eventData.support_phone, JSON.stringify(eventData.sponsors || []),
       JSON.stringify(eventData.field_config || {}), JSON.stringify(eventData.gates || []),
+      JSON.stringify(eventData.mainMedia || []), JSON.stringify(eventData.layoutMedia || []),
       eventData.is_featured || false, eventData.is_popular || false,
       eventData.presenter_name, eventData.organizer_name, eventData.revenueCurrency || 'INR'
     ]);
@@ -279,10 +285,10 @@ exports.update = asyncHandler(async (req, res) => {
         tags = $13, terms = $14, more_info = $15, extra_info = $16,
         financials = $17, prohibited_items = $18, refund_policy = $19,
         entry_policy = $20, support_email = $21, support_phone = $22,
-        sponsors = $23, field_config = $24, gates = $25, is_featured = $26,
-        is_popular = $27, presenter_name = $28, organizer_name = $29,
-        revenue_currency = $30, updated_at = NOW()
-      WHERE id = $31
+        sponsors = $23, field_config = $24, gates = $25, main_media = $26, 
+        layout_media = $27, is_featured = $28, is_popular = $29, presenter_name = $30, 
+        organizer_name = $31, revenue_currency = $32, updated_at = NOW()
+      WHERE id = $33
     `, [
       eventData.title, eventData.description, eventData.date || eventData.start_date, eventData.end_date,
       eventData.location || eventData.venue_name, eventData.venue_address, eventData.map_url, eventData.status,
@@ -292,7 +298,8 @@ exports.update = asyncHandler(async (req, res) => {
       JSON.stringify(eventData.financials || {}), JSON.stringify(eventData.prohibited_items || []),
       eventData.refund_policy, eventData.entry_policy, eventData.support_email, eventData.support_phone,
       JSON.stringify(eventData.sponsors || []), JSON.stringify(eventData.field_config || {}),
-      JSON.stringify(eventData.gates || []), eventData.is_featured || false, eventData.is_popular || false,
+      JSON.stringify(eventData.gates || []), JSON.stringify(eventData.mainMedia || []), JSON.stringify(eventData.layoutMedia || []),
+      eventData.is_featured || false, eventData.is_popular || false,
       eventData.presenter_name, eventData.organizer_name, eventData.revenueCurrency || 'INR',
       id
     ]);

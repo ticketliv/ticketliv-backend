@@ -4,6 +4,7 @@ const { authenticate } = require('../../middleware/auth');
 const { asyncHandler } = require('../../middleware/errorHandler');
 const { query } = require('../../config/database');
 const { v4: uuidv4 } = require('uuid');
+const { formatDateOnly } = require('../../utils/dateUtils');
 
 // GET /ads
 router.get('/', asyncHandler(async (req, res) => {
@@ -15,7 +16,12 @@ router.get('/', asyncHandler(async (req, res) => {
   if (status) { where += ` AND status = $${idx}`; params.push(status); idx++; }
 
   const result = await query(`SELECT * FROM ads ${where} ORDER BY created_at DESC`, params);
-  res.json({ success: true, data: result.rows });
+  const mapped = result.rows.map(ad => ({
+    ...ad,
+    start_date: formatDateOnly(ad.start_date),
+    end_date: formatDateOnly(ad.end_date)
+  }));
+  res.json({ success: true, data: mapped });
 }));
 
 // POST /ads
@@ -27,7 +33,15 @@ router.post('/', authenticate, asyncHandler(async (req, res) => {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
     [id, title, type || 'banner', media_url, video_url, target_url, placement || 'home', status || 'Active', start_date, end_date]
   );
-  res.status(201).json({ success: true, data: result.rows[0] });
+  const inserted = result.rows[0];
+  res.status(201).json({ 
+    success: true, 
+    data: {
+      ...inserted,
+      start_date: formatDateOnly(inserted.start_date),
+      end_date: formatDateOnly(inserted.end_date)
+    } 
+  });
 }));
 
 // PUT /ads/:id
@@ -40,7 +54,15 @@ router.put('/:id', authenticate, asyncHandler(async (req, res) => {
      WHERE id = $8 RETURNING *`,
     [title, type, media_url, video_url, target_url, placement, status, req.params.id]
   );
-  res.json({ success: true, data: result.rows[0] });
+  const updated = result.rows[0];
+  res.json({ 
+    success: true, 
+    data: updated ? {
+      ...updated,
+      start_date: formatDateOnly(updated.start_date),
+      end_date: formatDateOnly(updated.end_date)
+    } : null
+  });
 }));
 
 // DELETE /ads/:id

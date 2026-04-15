@@ -4,13 +4,19 @@ const { authenticate } = require('../../middleware/auth');
 const { asyncHandler, AppError } = require('../../middleware/errorHandler');
 const { query } = require('../../config/database');
 const { v4: uuidv4 } = require('uuid');
+const { formatDateOnly } = require('../../utils/dateUtils');
 
 // === COUPONS ===
 
 // GET /marketing/coupons
 router.get('/coupons', authenticate, asyncHandler(async (req, res) => {
   const result = await query('SELECT * FROM coupons ORDER BY created_at DESC');
-  res.json({ success: true, data: result.rows });
+  const mapped = result.rows.map(c => ({
+    ...c,
+    expiry_date: formatDateOnly(c.expiry_date),
+    expiryDate: formatDateOnly(c.expiry_date)
+  }));
+  res.json({ success: true, data: mapped });
 }));
 
 // POST /marketing/coupons
@@ -24,7 +30,15 @@ router.post('/coupons', authenticate, asyncHandler(async (req, res) => {
      min_purchase || minPurchase || 0, max_discount || maxDiscount || null, expiry_date || expiryDate,
      usage_limit || usageLimit || 0, status || 'Active', JSON.stringify(applicable_event_ids || applicableEventIds || [])]
   );
-  res.status(201).json({ success: true, data: result.rows[0] });
+  const inserted = result.rows[0];
+  res.status(201).json({ 
+    success: true, 
+    data: {
+      ...inserted,
+      expiry_date: formatDateOnly(inserted.expiry_date),
+      expiryDate: formatDateOnly(inserted.expiry_date)
+    } 
+  });
 }));
 
 // PUT /marketing/coupons/:id
@@ -42,7 +56,15 @@ router.put('/coupons/:id', authenticate, asyncHandler(async (req, res) => {
      usage_limit || usageLimit, status, req.params.id]
   );
   if (result.rows.length === 0) throw new AppError('Coupon not found', 404);
-  res.json({ success: true, data: result.rows[0] });
+  const updated = result.rows[0];
+  res.json({ 
+    success: true, 
+    data: {
+      ...updated,
+      expiry_date: formatDateOnly(updated.expiry_date),
+      expiryDate: formatDateOnly(updated.expiry_date)
+    }
+  });
 }));
 
 // DELETE /marketing/coupons/:id
