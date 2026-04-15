@@ -42,7 +42,8 @@ const upload = multer({
 router.post('/upload', authenticate, upload.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
 
-  const fileUrl = `/uploads/${req.file.destination.split('uploads')[1].replace(/\\/g, '/')}/${req.file.filename}`;
+  const folder = req.file.destination.split(path.sep).pop();
+  const fileUrl = `/uploads/${folder}/${req.file.filename}`;
   res.json({
     success: true,
     data: {
