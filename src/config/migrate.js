@@ -127,7 +127,7 @@ const migrate = async () => {
       );
     `);
 
-    // === UPDATE EVENTS TABLE (Add columns if they don't exist) ===
+    // === UPDATE EVENTS TABLE (Add columns and update constraints) ===
     await client.query(`
       ALTER TABLE events ADD COLUMN IF NOT EXISTS main_media JSONB DEFAULT '[]';
       ALTER TABLE events ADD COLUMN IF NOT EXISTS layout_media JSONB DEFAULT '[]';
@@ -137,6 +137,10 @@ const migrate = async () => {
       ALTER TABLE events ADD COLUMN IF NOT EXISTS total_sales INTEGER DEFAULT 0;
       ALTER TABLE events ADD COLUMN IF NOT EXISTS total_revenue DECIMAL(12,2) DEFAULT 0;
       ALTER TABLE events ADD COLUMN IF NOT EXISTS revenue_currency VARCHAR(10) DEFAULT 'INR';
+      
+      -- Update status constraint to include all Admin portal statuses
+      ALTER TABLE events DROP CONSTRAINT IF EXISTS events_status_check;
+      ALTER TABLE events ADD CONSTRAINT events_status_check CHECK (status IN ('Draft', 'Pending Approval', 'Approved', 'Rejected', 'Published', 'Unpublished', 'Live', 'Cancelled', 'Completed', 'Sold Out'));
     `);
 
     // === EVENT CATEGORIES (many-to-many) ===
