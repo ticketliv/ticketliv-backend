@@ -309,8 +309,8 @@ exports.update = asyncHandler(async (req, res) => {
       await client.query('DELETE FROM ticket_types WHERE event_id = $1', [id]);
       for (const tc of eventData.ticketCategories) {
         await client.query(
-          'INSERT INTO ticket_types (event_id, name, price, capacity, max_per_user) VALUES ($1, $2, $3, $4, $5)',
-          [id, tc.name, tc.price || 0, tc.capacity || 0, tc.max_limit || tc.max_per_user || 10]
+          'INSERT INTO ticket_types (event_id, name, price, capacity, max_per_user, type) VALUES ($1, $2, $3, $4, $5, $6)',
+          [id, tc.name, tc.price || 0, tc.capacity || 0, tc.max_limit || tc.max_per_user || 10, tc.type || 'General']
         );
       }
     }
