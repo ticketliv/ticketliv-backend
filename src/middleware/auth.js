@@ -52,7 +52,8 @@ const checkPermission = (requiredPermission) => {
       return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     // Superadmin has all permissions
-    if (req.user.role === 'Superadmin' || req.user.role === 'superadmin') {
+    const role = (req.user.role || '').toLowerCase().replace(/\s/g, '');
+    if (role === 'superadmin') {
       return next();
     }
     const permissions = req.user.permissions || [];

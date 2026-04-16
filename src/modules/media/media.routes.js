@@ -28,9 +28,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB
   fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif|webp|mp4|mov|avi|pdf|svg/;
+    const allowed = /jpeg|jpg|png|gif|webp|mp4|mov|avi|pdf|svg|mkv|quicktime/;
     const ext = allowed.test(path.extname(file.originalname).toLowerCase());
     const mime = allowed.test(file.mimetype);
     if (ext || mime) cb(null, true);
@@ -40,7 +40,12 @@ const upload = multer({
 
 // POST /media/upload
 router.post('/upload', authenticate, upload.single('file'), asyncHandler(async (req, res) => {
-  if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+  console.log('[Media Upload] Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('[Media Upload] File:', req.file ? 'Received' : 'NOT RECEIVED');
+  if (!req.file) {
+    console.log('[Media Upload] Body:', JSON.stringify(req.body, null, 2));
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
+  }
 
   const folder = req.file.destination.split(path.sep).pop();
   const fileUrl = `/uploads/${folder}/${req.file.filename}`;

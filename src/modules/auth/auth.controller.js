@@ -6,8 +6,8 @@ const { cache } = require('../../config/redis');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ticketliv-dev-secret';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'ticketliv-refresh-secret';
-const ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
-const REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
+const ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '24h';
+const REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '30d';
 
 const DEFAULT_ROLE_PERMISSIONS = {
   Superadmin: ['/dashboard', '/events', '/marketing', '/attendees', '/create-event', '/categories', '/ads', '/analytics', '/finance', '/reports', '/settings', '/team', '/tickets', '/admin-control'],

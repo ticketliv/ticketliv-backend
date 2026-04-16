@@ -8,7 +8,7 @@ const registerSchema = z.object({
   name: z.string().min(2).max(255),
   email: z.string().email(),
   password: z.string().min(6).max(100),
-  role: z.enum(['Superadmin', 'Manager', 'Editor', 'Viewer']).optional().default('Viewer'),
+  role: z.string().optional().default('Viewer'), // Allow flexible roles, validated in controller logic
 });
 
 const loginSchema = z.object({

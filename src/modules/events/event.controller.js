@@ -277,6 +277,13 @@ exports.update = asyncHandler(async (req, res) => {
     await client.query('BEGIN');
     const { id } = req.params;
     const eventData = req.body;
+    // Validate that event exists before updating ticket types
+    const checkResult = await client.query('SELECT id FROM events WHERE id = $1', [id]);
+    if (checkResult.rows.length === 0) {
+      console.error(`❌ Update failed: Event ${id} not found in database.`);
+      throw new AppError('Event not found. It may have been deleted.', 404);
+    }
+
     await client.query(`
       UPDATE events SET
         title = $1, description = $2, start_date = $3, end_date = $4,

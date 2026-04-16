@@ -37,7 +37,6 @@ const server = http.createServer(app);
 // Initialize WebSocket
 initSocket(server);
 
-// --- CORS Configuration ---
 const allowedOrigins = [
   'https://admin.ticketliv.com',
   'https://www.ticketliv.com',
@@ -45,10 +44,12 @@ const allowedOrigins = [
   process.env.ADMIN_URL,
   process.env.ORGANIZER_URL,
   process.env.MOBILE_URL,
+  'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
-  'http://localhost:3000',
+  'http://localhost:5176',
+  'http://localhost:5177',
 ].filter(Boolean);
 
 app.use(cors({
@@ -71,7 +72,10 @@ app.use(cors({
 }));
 
 // --- Security & Parsing ---
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false, // Disable for now to allow maps and external embeds
+}));
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '50mb' }));
