@@ -127,6 +127,18 @@ const migrate = async () => {
       );
     `);
 
+    // === UPDATE EVENTS TABLE (Add columns if they don't exist) ===
+    await client.query(`
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS main_media JSONB DEFAULT '[]';
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS layout_media JSONB DEFAULT '[]';
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS presenter_name VARCHAR(255);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_name VARCHAR(255);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS gates JSONB DEFAULT '[]';
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS total_sales INTEGER DEFAULT 0;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS total_revenue DECIMAL(12,2) DEFAULT 0;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS revenue_currency VARCHAR(10) DEFAULT 'INR';
+    `);
+
     // === EVENT CATEGORIES (many-to-many) ===
     await client.query(`
       CREATE TABLE IF NOT EXISTS event_categories (
